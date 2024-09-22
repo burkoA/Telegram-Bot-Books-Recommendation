@@ -24,7 +24,7 @@ namespace BooksRec
         static async Task Main(string[] args)
         {
             var cts = new CancellationTokenSource();
-            var botOptions = new TelegramBotClientOptions("TOKEN");
+            var botOptions = new TelegramBotClientOptions("7510414878:AAGGTwL5_8Wd0deslAHQ2x-hW_hKwsh7LHo");
             bot = new TelegramBotClient(botOptions);
 
             me = await bot.GetMeAsync();
@@ -87,8 +87,57 @@ namespace BooksRec
 
                     await GetBookByAuthor(booksList, booksList.Count,msg);
                 }
+                currentOperation = null;
+            }
+            else if (currentOperation == "find_by_data")
+            {
+                string writtenYear = msg.Text;
 
-                // Reset the operation after completion
+                if (string.IsNullOrEmpty(writtenYear))
+                {
+                    await bot.SendTextMessageAsync(msg.Chat, "You didn't provide a year :(");
+                }
+                else
+                {
+
+                    if(writtenYear.Contains("-"))
+                    {
+                        string[] years = writtenYear.Split('-');
+
+                        if(years.Length == 2)
+                        {
+                            int startYear, endYear;
+
+                            if (int.TryParse(years[0].Trim(), out startYear) && int.TryParse(years[1].Trim(), out endYear))
+                            {
+                                booksList = _db.Books.Where(y => y.Year >= startYear && y.Year <= endYear).ToList();
+
+                                await GetBookByYear(booksList, booksList.Count, msg);
+                            }
+                        }
+                        else
+                        {
+                            await bot.SendTextMessageAsync(msg.Chat, "Invalid format of date (e.g 1950 - 1960 or 1960)");
+                        }
+                    }
+                    else
+                    {
+                        int year = int.Parse(writtenYear);
+
+                        if(year.GetType() != typeof(int))
+                        {
+                            await bot.SendTextMessageAsync(msg.Chat, "Wrong type :(");
+                        } 
+                        else
+                        {
+                            booksList = _db.Books.Where(y => y.Year == year).ToList();
+
+                            await GetBookByYear(booksList, booksList.Count, msg);
+                        }
+                    }
+
+                }
+
                 currentOperation = null;
             }
             else
@@ -101,22 +150,65 @@ namespace BooksRec
         {
             if (update is { CallbackQuery: { } query })
             {
-                await bot.AnswerCallbackQueryAsync(query.Id, $"You picked {query.Data}");
                 await bot.SendTextMessageAsync(query.Message!.Chat, $"User {query.From} clicked on {query.Data}");
 
-                if (query.Data!.Contains("author") || query.Data.Contains("another"))
+                //Find by Author
+
+                if (query.Data!.Contains("Find by author") || query.Data.Contains("another author"))
                 {
-                    // Set the operation context
                     currentOperation = "find_by_author";
 
-                    // Ask the user to provide the author's name
                     await bot.SendTextMessageAsync(query.Message.Chat, "Please write the author's name:");
                 } 
-                else if (query.Data.Contains("Repeat"))
+
+                if (query.Data.Contains("Repeat author"))
                 {
                     await GetBookByAuthor(booksList, booksList.Count, query.Message);
                 }
-                else if (query.Data.Contains("/start"))
+
+                //Find by Year
+
+                if (query.Data.Contains("Find by year"))
+                {
+                    int currentYear = DateTime.Now.Year;
+
+                    await bot.SendTextMessageAsync(query.Message.Chat, "Please choose range of year or write year by yourself:",
+                        replyMarkup: new InlineKeyboardMarkup().AddButtons("1950 - 1970", "1970 - 1990").AddNewRow()
+                        .AddButtons("1990 - 2010",$"2010 - {currentYear.ToString()}").AddNewRow().AddButton("Write yourself"));
+                }
+                else if (query.Data == "1950 - 1970")
+                {
+                    await HandleYearRangeQuery(query.Message, 1950, 1970);
+                }
+                else if (query.Data == "1970 - 1990")
+                {
+                    await HandleYearRangeQuery(query.Message, 1970, 1990);
+                }
+                else if (query.Data == "1990 - 2010")
+                {
+                    await HandleYearRangeQuery(query.Message, 1990, 2010);
+                }
+                else if (query.Data == $"2010 - {DateTime.Now.Year}")
+                {
+                    await HandleYearRangeQuery(query.Message, 2010, DateTime.Now.Year);
+                }
+
+
+                if (query.Data.Contains("Write yourself") || query.Data.Contains("another year"))
+                {
+                    currentOperation = "find_by_data";
+
+                    await bot.SendTextMessageAsync(query.Message.Chat, "Please, write year");
+                }
+
+                if(query.Data.Contains("Repeat year"))
+                {
+                    await GetBookByYear(booksList, booksList.Count, query.Message);
+                }
+
+                //Start command
+
+                if (query.Data.Contains("/start"))
                 {
                     Message msg = new Message()
                     {
@@ -126,6 +218,7 @@ namespace BooksRec
 
                     await OnMessage(msg, update.Type);
                 }
+
             }
         }
 
@@ -141,7 +234,9 @@ namespace BooksRec
                                         $"Book published year - {result[0].Year} \n" +
                                         $"Choose next option: \n";
 
-                await bot.SendTextMessageAsync(msg.Chat, resultMessage, replyMarkup: new InlineKeyboardMarkup().AddButtons("Repeat (books can repeat)", "Write another").AddNewRow().AddButton("Came back to /start"));
+                await bot.SendTextMessageAsync(msg.Chat, resultMessage, replyMarkup: new InlineKeyboardMarkup()
+                    .AddButton("Repeat author (books can repeat)").AddNewRow().AddButton("Write another author")
+                    .AddNewRow().AddButton("Came back to /start"));
             }
             else if (result.Count > 1)
             {
@@ -153,12 +248,60 @@ namespace BooksRec
                                         $"Book published year - {result[randomBook].Year} \n" +
                                         $"Choose next option: \n";
 
-                await bot.SendTextMessageAsync(msg.Chat, resultMessage, replyMarkup: new InlineKeyboardMarkup().AddButtons("Repeat (books can repeat)", "Write another").AddNewRow().AddButton("Came back to /start"));
+                await bot.SendTextMessageAsync(msg.Chat, resultMessage, replyMarkup: new InlineKeyboardMarkup()
+                    .AddButton("Repeat author(books can repeat)").AddNewRow().AddButton("Write another author")
+                    .AddNewRow().AddButton("Came back to /start"));
             }
             else
             {
-                await bot.SendTextMessageAsync(msg.Chat, "No books found for this author.", replyMarkup: new InlineKeyboardMarkup().AddButton("Write another").AddNewRow().AddButton("Came back to /start"));
+                await bot.SendTextMessageAsync(msg.Chat, "No books found for this author.", replyMarkup: 
+                    new InlineKeyboardMarkup().AddButton("Write another author").AddNewRow()
+                    .AddButton("Came back to /start"));
             }
+        }
+
+        private static async Task GetBookByYear(List<Book> result, int count, Message msg)
+        {
+            string resultMessage = "Here are the books by the year:\n";
+
+            if (result.Count == 1)
+            {
+                resultMessage += $"Book title - {result[0].Title} \n" +
+                                        $"Book author - {result[0].Author} \n" +
+                                        $"Book genres - {result[0].Genres} \n" +
+                                        $"Book published year - {result[0].Year} \n" +
+                                        $"Choose next option: \n";
+
+                await bot.SendTextMessageAsync(msg.Chat, resultMessage, replyMarkup: new InlineKeyboardMarkup()
+                    .AddButton("Repeat year(books can repeat)").AddNewRow().AddButton("Write another year")
+                    .AddNewRow().AddButton("Came back to /start"));
+            }
+            else if (result.Count > 1)
+            {
+                int randomBook = random.Next(0, result.Count);
+
+                resultMessage += $"Book title - {result[randomBook].Title} \n" +
+                                        $"Book author - {result[randomBook].Author} \n" +
+                                        $"Book genres - {result[randomBook].Genres} \n" +
+                                        $"Book published year - {result[randomBook].Year} \n" +
+                                        $"Choose next option: \n";
+
+                await bot.SendTextMessageAsync(msg.Chat, resultMessage, replyMarkup: new InlineKeyboardMarkup()
+                    .AddButton("Repeat year(books can repeat)").AddNewRow().AddButton("Write another year")
+                    .AddNewRow().AddButton("Came back to /start"));
+            }
+            else
+            {
+                await bot.SendTextMessageAsync(msg.Chat, "No books found for this year.", replyMarkup: 
+                    new InlineKeyboardMarkup().AddButton("Write another year").AddNewRow()
+                    .AddButton("Came back to /start"));
+            }
+        }
+
+        private static async Task HandleYearRangeQuery(Message msg, int startYear, int endYear)
+        {
+            booksList = _db.Books.Where(b => b.Year >= startYear && b.Year <= endYear).ToList();
+            await GetBookByYear(booksList, booksList.Count, msg);
         }
     }
 }
