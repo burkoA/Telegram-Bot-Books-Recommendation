@@ -161,7 +161,8 @@ namespace BooksRec
                 {
                     currentOperation = "find_by_author";
 
-                    await bot.SendTextMessageAsync(query.Message.Chat, "Please write the author's name:");
+                    await bot.SendTextMessageAsync(query.Message.Chat, "Please write the author's name: \n" +
+                        "If you can't find author, check this list :) - https://telegra.ph/List-of-Author-for-BookRecBot-bot-09-27");
                 } 
 
                 if (query.Data.Contains("Repeat author"))
