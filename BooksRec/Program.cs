@@ -27,7 +27,7 @@ namespace BooksRec
         static async Task Main(string[] args)
         {
             var cts = new CancellationTokenSource();
-            var botOptions = new TelegramBotClientOptions("7510414878:AAGGTwL5_8Wd0deslAHQ2x-hW_hKwsh7LHo");
+            var botOptions = new TelegramBotClientOptions("TOKEN");
             bot = new TelegramBotClient(botOptions);
 
             me = await bot.GetMeAsync();
