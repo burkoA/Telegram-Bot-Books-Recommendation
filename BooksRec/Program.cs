@@ -21,6 +21,9 @@ namespace BooksRec
         private static string currentOperation = null;
         private static List<Book> booksList = new List<Book>();
 
+        private static Dictionary<long, List<string>> userSelectedGenres = new Dictionary<long, List<string>>();
+        private static Dictionary<long, List<Book>> userBooksList = new Dictionary<long, List<Book>>();
+
         static async Task Main(string[] args)
         {
             var cts = new CancellationTokenSource();
@@ -56,7 +59,7 @@ namespace BooksRec
             else if (msg.Text == "/findbook")
             {
                 await bot.SendTextMessageAsync(msg.Chat, "Choose one option:",
-                    replyMarkup: new InlineKeyboardMarkup().AddButtons("Find by author", "Find by genre").AddNewRow().AddButtons("Find by year", "Find by all categories"));
+                    replyMarkup: new InlineKeyboardMarkup().AddButtons("Find by author", "Find by genre").AddNewRow().AddButton("Find by year"));
             }
             else if (msg.Text == "/description")
             {
@@ -206,6 +209,117 @@ namespace BooksRec
                     await GetBookByYear(booksList, booksList.Count, query.Message);
                 }
 
+                //By Genre
+
+                if (query.Data.Contains("Find by genre"))
+                {
+                    List<string> genreList = _db.Books
+                                 .AsEnumerable()
+                                 .SelectMany(book => book.Genres.Split(','))
+                                 .Select(genre => genre.Trim())
+                                 .Distinct()
+                                 .ToList();
+
+                    userSelectedGenres[query.Message.Chat.Id] = new List<string>();
+
+                    await bot.SendTextMessageAsync(query.Message.Chat, "Choose genre (max - 2)",
+                        replyMarkup: GetGenreList(genreList).AddNewRow().AddButton("End choose"));
+                }
+                else if (query.Data.Contains("End choose"))
+                {
+                    if (userSelectedGenres.TryGetValue(query.Message.Chat.Id, out List<string> selectedGenres) && selectedGenres.Count > 0)
+                    {
+                        string selectedGenresText = string.Join(", ", selectedGenres);
+                        await bot.SendTextMessageAsync(query.Message.Chat.Id, $"You chose genres: {selectedGenresText}");
+
+                        IQueryable<Book> queryBooks = _db.Books.AsQueryable();
+
+                        if (selectedGenres.Count == 1)
+                        {
+                            string genre = selectedGenres[0];
+                            queryBooks = queryBooks.Where(g => g.Genres.Contains(genre));
+                        }
+                        else if (selectedGenres.Count == 2)
+                        {
+                            string genre1 = selectedGenres[0];
+                            string genre2 = selectedGenres[1];
+                            queryBooks = queryBooks.Where(g => g.Genres.Contains(genre1) && g.Genres.Contains(genre2));
+                        }
+
+                        var booksList = queryBooks.ToList();
+
+                        userBooksList[query.Message.Chat.Id] = booksList;
+
+                        if (booksList.Count > 0)
+                        {
+                            Random random = new Random();
+                            Book randomBook = booksList[random.Next(booksList.Count)];
+
+                            string resultMessage = $"Book title - {randomBook.Title} \n" +
+                                                   $"Book author - {randomBook.Author} \n" +
+                                                   $"Book genres - {randomBook.Genres} \n" +
+                                                   $"Book published year - {randomBook.Year} \n\n" +
+                                                   $"Choose next option: \n";
+
+                            await bot.SendTextMessageAsync(query.Message.Chat.Id, resultMessage,
+                                replyMarkup: new InlineKeyboardMarkup()
+                                    .AddButton("Repeat this genre").AddNewRow().AddButton("Find by genre")
+                                    .AddNewRow().AddButton("Came back to /start"));
+                        }
+                        else
+                        {
+                            await bot.SendTextMessageAsync(query.Message.Chat.Id, "No books found for the selected genres.", replyMarkup: new InlineKeyboardMarkup().AddButton("Find by genre"));
+                        }
+                    }
+                    else
+                    {
+                        await bot.SendTextMessageAsync(query.Message.Chat.Id, "You haven't chosen any genres :(");
+                    }
+                }
+                else if (query.Data.Contains("Repeat this genre"))
+                {
+                    if (userBooksList.TryGetValue(query.Message.Chat.Id, out List<Book> booksList) && booksList.Count > 0)
+                    {
+                        Random random = new Random();
+                        Book randomBook = booksList[random.Next(booksList.Count)];
+
+                        string resultMessage = $"Book title - {randomBook.Title} \n" +
+                                               $"Book author - {randomBook.Author} \n" +
+                                               $"Book genres - {randomBook.Genres} \n" +
+                                               $"Book published year - {randomBook.Year} \n\n" +
+                                               $"Choose next option: \n";
+
+                        await bot.SendTextMessageAsync(query.Message.Chat.Id, resultMessage,
+                            replyMarkup: new InlineKeyboardMarkup()
+                                .AddButton("Repeat this genre").AddNewRow().AddButton("Find by genre")
+                                .AddNewRow().AddButton("Came back to /start"));
+                    }
+                    else
+                    {
+                        await bot.SendTextMessageAsync(query.Message.Chat.Id, "No more books available for the selected genre.", replyMarkup: new InlineKeyboardMarkup().AddButton("Find by genre"));
+                    }
+                }
+                else if (userSelectedGenres.TryGetValue(query.Message.Chat.Id, out List<string> userGenres))
+                {
+                    string selectedGenre = query.Data;
+
+                    if (!userGenres.Contains(selectedGenre))
+                    {
+                        userGenres.Add(selectedGenre);
+                        await bot.SendTextMessageAsync(query.Message.Chat.Id, $"You selected: {selectedGenre}");
+
+                        if (userGenres.Count == 2)
+                        {
+                            await bot.SendTextMessageAsync(query.Message.Chat.Id, "You have selected two genres. Click 'End choose' to continue.");
+                        }
+                    }
+                    else
+                    {
+                        await bot.SendTextMessageAsync(query.Message.Chat.Id, "You have already selected this genre.");
+                    }
+                }
+
+
                 //Start command
 
                 if (query.Data.Contains("/start"))
@@ -220,6 +334,29 @@ namespace BooksRec
                 }
 
             }
+        }
+
+        private static InlineKeyboardMarkup GetGenreList(List<string> genreStringList)
+        {
+            List<List<InlineKeyboardButton>> markups = new List<List<InlineKeyboardButton>>();
+
+            for (int i = 0; i < genreStringList.Count; i += 2)
+            {
+                List<InlineKeyboardButton> markupRow = new List<InlineKeyboardButton>();
+
+                markupRow.Add(InlineKeyboardButton.WithCallbackData(genreStringList[i], genreStringList[i]));
+
+                if (i + 1 < genreStringList.Count)
+                {
+                    markupRow.Add(InlineKeyboardButton.WithCallbackData(genreStringList[i + 1], genreStringList[i + 1]));
+                }
+
+                markups.Add(markupRow);
+            }
+
+            InlineKeyboardMarkup replyMark = new InlineKeyboardMarkup(markups);
+
+            return replyMark;
         }
 
         private static async Task GetBookByAuthor(List<Book> result, int count, Message msg)
