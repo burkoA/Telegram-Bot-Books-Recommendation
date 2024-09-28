@@ -13,12 +13,19 @@ namespace BooksRec
 {
     class Program
     {
+        enum Operation
+        {
+            None,
+            FindByAuthor,
+            FindByYear
+        }
+
         private static readonly BooksDB _db = new BooksDB();
         private static TelegramBotClient bot;
         private static User me;
         private static Random random = new Random();
 
-        private static string currentOperation = null;
+        private static Operation currentOperation = Operation.None;
         private static List<Book> booksList = new List<Book>();
 
         private static Dictionary<long, List<string>> userSelectedGenres = new Dictionary<long, List<string>>();
@@ -74,9 +81,8 @@ namespace BooksRec
                                                         "/findbook - search for books by various categories \n" +
                                                         "/description - get a description of what I can do :)");
             }
-            else if (currentOperation == "find_by_author")
+            else if (currentOperation == Operation.FindByAuthor)
             {
-                // User is providing the author name
                 string authorName = msg.Text;
 
                 if (string.IsNullOrEmpty(authorName))
@@ -85,14 +91,13 @@ namespace BooksRec
                 }
                 else
                 {
-                    // Query the database to find books by the given author
                     booksList = _db.Books.Where(r => r.Author.Contains(authorName)).ToList();
 
-                    await GetBookByAuthor(booksList, booksList.Count,msg);
+                    await GetBookByAuthorAsync(booksList, booksList.Count,msg);
                 }
-                currentOperation = null;
+                currentOperation = Operation.None;
             }
-            else if (currentOperation == "find_by_data")
+            else if (currentOperation == Operation.FindByYear)
             {
                 string writtenYear = msg.Text;
 
@@ -115,7 +120,7 @@ namespace BooksRec
                             {
                                 booksList = _db.Books.Where(y => y.Year >= startYear && y.Year <= endYear).ToList();
 
-                                await GetBookByYear(booksList, booksList.Count, msg);
+                                await GetBookByYearAsync(booksList, booksList.Count, msg);
                             }
                         }
                         else
@@ -135,13 +140,13 @@ namespace BooksRec
                         {
                             booksList = _db.Books.Where(y => y.Year == year).ToList();
 
-                            await GetBookByYear(booksList, booksList.Count, msg);
+                            await GetBookByYearAsync(booksList, booksList.Count, msg);
                         }
                     }
 
                 }
 
-                currentOperation = null;
+                currentOperation = Operation.None;
             }
             else
             {
@@ -159,7 +164,7 @@ namespace BooksRec
 
                 if (query.Data!.Contains("Find by author") || query.Data.Contains("another author"))
                 {
-                    currentOperation = "find_by_author";
+                    currentOperation =Operation.FindByAuthor;
 
                     await bot.SendTextMessageAsync(query.Message.Chat, "Please write the author's name: \n" +
                         "If you can't find author, check this list :) - https://telegra.ph/List-of-Author-for-BookRecBot-bot-09-27");
@@ -167,7 +172,7 @@ namespace BooksRec
 
                 if (query.Data.Contains("Repeat author"))
                 {
-                    await GetBookByAuthor(booksList, booksList.Count, query.Message);
+                    await GetBookByAuthorAsync(booksList, booksList.Count, query.Message);
                 }
 
                 //Find by Year
@@ -200,14 +205,14 @@ namespace BooksRec
 
                 if (query.Data.Contains("Write yourself") || query.Data.Contains("another year"))
                 {
-                    currentOperation = "find_by_data";
+                    currentOperation = Operation.FindByYear;
 
                     await bot.SendTextMessageAsync(query.Message.Chat, "Please, write year");
                 }
 
                 if(query.Data.Contains("Repeat year"))
                 {
-                    await GetBookByYear(booksList, booksList.Count, query.Message);
+                    await GetBookByYearAsync(booksList, booksList.Count, query.Message);
                 }
 
                 //By Genre
@@ -259,7 +264,8 @@ namespace BooksRec
                             string resultMessage = $"Book title - {randomBook.Title} \n" +
                                                    $"Book author - {randomBook.Author} \n" +
                                                    $"Book genres - {randomBook.Genres} \n" +
-                                                   $"Book published year - {randomBook.Year} \n\n" +
+                                                   $"Book published year - {randomBook.Year} \n" +
+                                                   $"Book description - {randomBook.Description} \n\n" +
                                                    $"Choose next option: \n";
 
                             await bot.SendTextMessageAsync(query.Message.Chat.Id, resultMessage,
@@ -287,7 +293,8 @@ namespace BooksRec
                         string resultMessage = $"Book title - {randomBook.Title} \n" +
                                                $"Book author - {randomBook.Author} \n" +
                                                $"Book genres - {randomBook.Genres} \n" +
-                                               $"Book published year - {randomBook.Year} \n\n" +
+                                               $"Book published year - {randomBook.Year} \n" +
+                                               $"Book description - {randomBook.Description} \n\n" +
                                                $"Choose next option: \n";
 
                         await bot.SendTextMessageAsync(query.Message.Chat.Id, resultMessage,
@@ -319,7 +326,6 @@ namespace BooksRec
                         await bot.SendTextMessageAsync(query.Message.Chat.Id, "You have already selected this genre.");
                     }
                 }
-
 
                 //Start command
 
@@ -360,7 +366,7 @@ namespace BooksRec
             return replyMark;
         }
 
-        private static async Task GetBookByAuthor(List<Book> result, int count, Message msg)
+        private static async Task GetBookByAuthorAsync(List<Book> result, int count, Message msg)
         {
             string resultMessage = "Here are the books by the author:\n";
 
@@ -370,6 +376,7 @@ namespace BooksRec
                                         $"Book author - {result[0].Author} \n" +
                                         $"Book genres - {result[0].Genres} \n" +
                                         $"Book published year - {result[0].Year} \n" +
+                                        $"Book description - {result[0].Description} \n\n" +
                                         $"Choose next option: \n";
 
                 await bot.SendTextMessageAsync(msg.Chat, resultMessage, replyMarkup: new InlineKeyboardMarkup()
@@ -384,6 +391,7 @@ namespace BooksRec
                                         $"Book author - {result[randomBook].Author} \n" +
                                         $"Book genres - {result[randomBook].Genres} \n" +
                                         $"Book published year - {result[randomBook].Year} \n" +
+                                        $"Book description - {result[randomBook].Description} \n\n" +
                                         $"Choose next option: \n";
 
                 await bot.SendTextMessageAsync(msg.Chat, resultMessage, replyMarkup: new InlineKeyboardMarkup()
@@ -398,7 +406,7 @@ namespace BooksRec
             }
         }
 
-        private static async Task GetBookByYear(List<Book> result, int count, Message msg)
+        private static async Task GetBookByYearAsync(List<Book> result, int count, Message msg)
         {
             string resultMessage = "Here are the books by the year:\n";
 
@@ -408,6 +416,7 @@ namespace BooksRec
                                         $"Book author - {result[0].Author} \n" +
                                         $"Book genres - {result[0].Genres} \n" +
                                         $"Book published year - {result[0].Year} \n" +
+                                        $"Book description - {result[0].Description} \n\n" +
                                         $"Choose next option: \n";
 
                 await bot.SendTextMessageAsync(msg.Chat, resultMessage, replyMarkup: new InlineKeyboardMarkup()
@@ -422,6 +431,7 @@ namespace BooksRec
                                         $"Book author - {result[randomBook].Author} \n" +
                                         $"Book genres - {result[randomBook].Genres} \n" +
                                         $"Book published year - {result[randomBook].Year} \n" +
+                                        $"Book description - {result[randomBook].Description} \n\n" +
                                         $"Choose next option: \n";
 
                 await bot.SendTextMessageAsync(msg.Chat, resultMessage, replyMarkup: new InlineKeyboardMarkup()
@@ -439,7 +449,7 @@ namespace BooksRec
         private static async Task HandleYearRangeQuery(Message msg, int startYear, int endYear)
         {
             booksList = _db.Books.Where(b => b.Year >= startYear && b.Year <= endYear).ToList();
-            await GetBookByYear(booksList, booksList.Count, msg);
+            await GetBookByYearAsync(booksList, booksList.Count, msg);
         }
     }
 }

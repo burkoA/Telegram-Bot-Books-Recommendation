@@ -17,5 +17,7 @@ namespace BooksRec.BooksLibraryContext
         public int Year { get; set; }
 
         public double Rating { get; set; }
+
+        public string Description { get; set; }
     }
 }
