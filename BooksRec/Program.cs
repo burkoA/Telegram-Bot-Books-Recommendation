@@ -8,7 +8,6 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace BooksRec
 {
@@ -32,10 +31,12 @@ namespace BooksRec
         private static Dictionary<long, List<string>> _userSelectedGenres = new Dictionary<long, List<string>>();
         private static Dictionary<long, List<Book>> _userBooksList = new Dictionary<long, List<Book>>();
 
+        private const string linkToAuthors = "https://telegra.ph/List-of-Author-for-BookRecBot-bot-09-27";
+
         static async Task Main(string[] args)
         {
             var cts = new CancellationTokenSource();
-            _botClient = new TelegramBotClient("7510414878:AAGGTwL5_8Wd0deslAHQ2x-hW_hKwsh7LHo");
+            _botClient = new TelegramBotClient("TOKEN");
 
             _botInfo = await _botClient.GetMeAsync();
             Console.WriteLine($"@{_botInfo.Username} is running... Press Enter to terminate");
@@ -140,14 +141,14 @@ namespace BooksRec
 
         private static async Task SendDescriptionMessage(Message message)
         {
-            string descriptionText = "I'm a bot created to help you find interesting books. \n" +
-                "I offer options for finding books by different categories. \n" +
-                "Start by pressing or typing /findbook to explore.";
+            string descriptionText = "I'm a bot created to help you find interesting books. :)\n" +
+                "I offer options for finding books by different categories. 0_0\n" +
+                "Start by pressing or typing /findbook to explore. <-";
 
             await _botClient.SendTextMessageAsync(message.Chat, descriptionText);
         }
 
-        private static async Task OnUpdate(Telegram.Bot.Types.Update update)
+        private static async Task OnUpdate(Update update)
         {
             if (update is { CallbackQuery: { } query })
             {
@@ -158,7 +159,7 @@ namespace BooksRec
                     _currentUserOperation = Operation.FindByAuthor;
 
                     await _botClient.SendTextMessageAsync(query.Message.Chat, "Please write the author's name: \n" +
-                        "If you can't find author, check this list :) - https://telegra.ph/List-of-Author-for-BookRecBot-bot-09-27");
+                        $"If you can't find author, check this list :) - {linkToAuthors}");
                 } 
 
                 if (query.Data.Contains("Repeat author"))
@@ -237,7 +238,7 @@ namespace BooksRec
                     if (!userGenres.Contains(selectedGenre))
                     {
                         userGenres.Add(selectedGenre);
-                        await _botClient.SendTextMessageAsync(query.Message.Chat.Id, $"You selected: {selectedGenre}");
+                        await _botClient.SendTextMessageAsync(query.Message.Chat.Id, $"You selected: {selectedGenre}. Click 'End Choose' of you want only 1 genre :)");
 
                         if (userGenres.Count == 2)
                         {
@@ -309,7 +310,7 @@ namespace BooksRec
             }
             else
             {
-                await _botClient.SendTextMessageAsync(callback.Message.Chat.Id, "No more books available for the selected genre.", replyMarkup: new InlineKeyboardMarkup().AddButton("Find by genre"));
+                await _botClient.SendTextMessageAsync(callback.Message.Chat.Id, "No more books available for the selected genre. :(", replyMarkup: new InlineKeyboardMarkup().AddButton("Find by genre"));
             }
         }
 
@@ -318,7 +319,6 @@ namespace BooksRec
             if (_userSelectedGenres.TryGetValue(update.Message.Chat.Id, out List<string> selectedGenres) && selectedGenres.Count > 0)
             {
                 string selectedGenresText = string.Join(", ", selectedGenres);
-                await _botClient.SendTextMessageAsync(update.Message.Chat.Id, $"You chose genres: {selectedGenresText}");
 
                 IQueryable<Book> queryBooks = _db.Books.AsQueryable();
 
@@ -355,7 +355,7 @@ namespace BooksRec
                 }
                 else
                 {
-                    await _botClient.SendTextMessageAsync(update.Message.Chat.Id, "No books found for the selected genres.",
+                    await _botClient.SendTextMessageAsync(update.Message.Chat.Id, "No books found for the selected genres. :(",
                         replyMarkup: new InlineKeyboardMarkup().AddButton("Find by genre"));
                 }
             }
@@ -372,35 +372,40 @@ namespace BooksRec
             {
                 string[] years = userMessage.Split('-');
 
-                if (years.Length == 2)
+                if (years[0].GetType() == typeof(int) || years[1].GetType() == typeof(int))
                 {
-                    int startYear, endYear;
-
-                    if (int.TryParse(years[0].Trim(), out startYear) && int.TryParse(years[1].Trim(), out endYear))
+                    if (years.Length == 2)
                     {
-                        _booksList = _db.Books.Where(y => y.Year >= startYear && y.Year <= endYear).ToList();
+                        int startYear, endYear;
 
-                        await GetBooksAsync(_booksList, msg, "year");
+                        if (int.TryParse(years[0].Trim(), out startYear) && int.TryParse(years[1].Trim(), out endYear))
+                        {
+                            _booksList = _db.Books.Where(y => y.Year >= startYear && y.Year <= endYear).ToList();
+
+                            await GetBooksAsync(_booksList, msg, "year");
+                        }
+                    }
+                    else
+                    {
+                        await _botClient.SendTextMessageAsync(msg.Chat, "Invalid format of date (e.g 1950 - 1960 or 1960)");
                     }
                 }
                 else
                 {
-                    await _botClient.SendTextMessageAsync(msg.Chat, "Invalid format of date (e.g 1950 - 1960 or 1960)");
+                    await _botClient.SendTextMessageAsync(msg.Chat, "Wrong type :(", replyMarkup: new InlineKeyboardMarkup().AddButton("Find by year"));
                 }
             }
             else
             {
-                int year = int.Parse(userMessage);
-
-                if (year.GetType() != typeof(int))
-                {
-                    await _botClient.SendTextMessageAsync(msg.Chat, "Wrong type :(", replyMarkup: new InlineKeyboardMarkup().AddButton("Find by year").AddNewRow().AddButton("Back to /start"));
-                }
-                else
+                if(int.TryParse(userMessage, out int year))
                 {
                     _booksList = _db.Books.Where(y => y.Year == year).ToList();
 
                     await GetBooksAsync(_booksList, msg, "year");
+                }
+                else
+                {
+                    await _botClient.SendTextMessageAsync(msg.Chat, "Wrong type :(", replyMarkup: new InlineKeyboardMarkup().AddButton("Find by year").AddNewRow().AddButton("Back to /start"));
                 }
             }
         }
@@ -441,7 +446,7 @@ namespace BooksRec
             }
             else
             {
-                await _botClient.SendTextMessageAsync(msg.Chat, $"No books found for this {searchType}.", replyMarkup:
+                await _botClient.SendTextMessageAsync(msg.Chat, $"No books found for this {searchType}. :(", replyMarkup:
                     new InlineKeyboardMarkup().AddButton($"Write another {searchType}").AddNewRow()
                     .AddButton("Came back to /start"));
             }
