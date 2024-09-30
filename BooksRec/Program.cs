@@ -1,4 +1,5 @@
 ﻿using BooksRec.BooksLibraryContext;
+using BooksRec.Model;
 using System;
 using System.Linq;
 using System.Threading;
@@ -238,7 +239,7 @@ namespace BooksRec
                     if (!userGenres.Contains(selectedGenre))
                     {
                         userGenres.Add(selectedGenre);
-                        await _botClient.SendTextMessageAsync(query.Message.Chat.Id, $"You selected: {selectedGenre}. Click 'End Choose' of you want only 1 genre :)");
+                        await _botClient.SendTextMessageAsync(query.Message.Chat.Id, $"You selected: {selectedGenre}. Click 'End Choose' if you want only 1 genre :)");
 
                         if (userGenres.Count == 2)
                         {

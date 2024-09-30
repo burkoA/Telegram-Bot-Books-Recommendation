@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace BooksRec.BooksLibraryContext
+namespace BooksRec.Model
 {
     public class Book
     {
